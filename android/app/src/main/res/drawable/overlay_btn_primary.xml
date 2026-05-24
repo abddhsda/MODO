@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Кнопка «Добавить» — акцентный цвет.
+  Цвет здесь дефолтный (orange); реальный accent применяется через
+  setColorFilter в AddPlanActivity.getAccentColor() так же как и в виджете.
+  Радиус 20dp — как у ElevatedButton в Flutter (borderRadius: circular(20)).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FFE8927C" />
+    <corners android:radius="20dp" />
+</shape>

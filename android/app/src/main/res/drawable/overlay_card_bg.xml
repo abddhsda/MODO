@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Фон нижнего шита AddPlanActivity.
+  Flutter _AddPlanSheet: backgroundColor = scaffoldBackgroundColor,
+  borderRadius = top 24dp — точное совпадение.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FF1A1A1A" />
+    <corners
+        android:topLeftRadius="24dp"
+        android:topRightRadius="24dp" />
+</shape>

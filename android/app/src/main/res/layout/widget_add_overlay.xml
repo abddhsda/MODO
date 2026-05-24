@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  widget_add_overlay.xml — нижний шит в стиле _AddPlanSheet из PlannerScreen
+  ───────────────────────────────────────────────────────────────────────────
+  Flutter _AddPlanSheet:
+    • backgroundColor: scaffoldBackgroundColor (#1E1E1E тёмная)
+    • borderRadius: top 24dp
+    • Поле ввода: border: none, fontSize 18, fontWeight bold
+    • Кнопка времени: серый текст, иконка часов
+    • Кнопка «Добавить»: accent, скруглённая 20dp, w700
+    • Кнопка «Отмена»: TextButton серый
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="bottom"
+    android:fitsSystemWindows="true"
+    android:background="#99000000">
+
+    <LinearLayout
+        android:id="@+id/overlay_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/overlay_card_bg"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="28dp">
+
+        <!-- Заголовок — как в Flutter sheet -->
+        <TextView
+            android:id="@+id/overlay_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Новый план"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFFFF"
+            android:fontFamily="sans-serif-black"
+            android:layout_marginBottom="16dp" />
+
+        <!-- Поле ввода — стиль Flutter: крупный шрифт, без рамки -->
+        <EditText
+            android:id="@+id/overlay_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Что планируешь?"
+            android:textColor="#FFFFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:background="@drawable/overlay_input_bg"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:paddingTop="13dp"
+            android:paddingBottom="13dp"
+            android:inputType="text|textCapSentences"
+            android:imeOptions="actionDone"
+            android:maxLines="2" />
+
+        <!-- Строка выбора времени — как кнопка времени в Flutter sheet -->
+        <LinearLayout
+            android:id="@+id/overlay_time_row"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/overlay_input_bg"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⏰"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/overlay_time_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Добавить время (необязательно)"
+                android:textColor="#66FFFFFF"
+                android:textSize="14sp"
+                android:layout_marginStart="10dp"
+                android:fontFamily="sans-serif" />
+
+            <TextView
+                android:id="@+id/overlay_time_clear"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:text="✕"
+                android:gravity="center"
+                android:textColor="#66FFFFFF"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+        </LinearLayout>
+
+        <!-- Кнопки действий — как в Flutter: TextButton + ElevatedButton -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="20dp"
+            android:weightSum="2">
+
+            <!-- Отмена — TextButton стиль: нет фона, серый текст -->
+            <Button
+                android:id="@+id/overlay_cancel"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="Отмена"
+                android:textColor="#66FFFFFF"
+                android:textSize="15sp"
+                android:background="@drawable/overlay_btn_secondary"
+                android:layout_marginEnd="8dp"
+                android:fontFamily="sans-serif-medium" />
+
+            <!-- Добавить — ElevatedButton: акцентный, скруглённый, bold -->
+            <Button
+                android:id="@+id/overlay_save"
+                android:layout_width="0dp"
+                android:layout_height="52dp"
+                android:layout_weight="1"
+                android:text="Добавить"
+                android:textColor="#FFFFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:background="@drawable/overlay_btn_primary"
+                android:fontFamily="sans-serif-medium" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</LinearLayout>

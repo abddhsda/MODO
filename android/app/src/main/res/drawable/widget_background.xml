@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Фон виджета — соответствует scaffoldBackgroundColor тёмной темы Flutter.
+  В Flutter: Color.alphaBlend(accent(5%), #121212) ≈ #1A1A1A с лёгким акцентом.
+  Радиус 20dp как у карточек в планере.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#F01E1E1E" />
+    <corners android:radius="20dp" />
+</shape>

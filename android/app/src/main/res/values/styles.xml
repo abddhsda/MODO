@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Flutter launch themes -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+
+    <!-- ══════════════════════════════════════════════════
+         TimePicker темы — по одной на каждый акцентный цвет
+         Выбирается в AddPlanActivity.createThemedContext()
+         ══════════════════════════════════════════════════ -->
+
+    <!-- Базовая тема (применяется ко всем через parent) -->
+    <style name="TimePickerBase" parent="android:Theme.Material.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:textColorPrimary">#FFFFFFFF</item>
+        <item name="android:textColorSecondary">#FFAAAAAA</item>
+        <item name="android:buttonBarButtonStyle">@style/TimePickerButton</item>
+    </style>
+
+    <!-- 🟠 Оранжевый (index 0, default) -->
+    <style name="TimePickerTheme" parent="TimePickerBase">
+        <item name="android:colorAccent">#FFE8927C</item>
+        <item name="android:colorPrimary">#FFE8927C</item>
+        <item name="android:colorControlActivated">#FFE8927C</item>
+    </style>
+
+    <!-- 🔵 Сине-голубой (index 1) -->
+    <style name="TimePickerThemeBlue" parent="TimePickerBase">
+        <item name="android:colorAccent">#FF5B8CDB</item>
+        <item name="android:colorPrimary">#FF5B8CDB</item>
+        <item name="android:colorControlActivated">#FF5B8CDB</item>
+    </style>
+
+    <!-- 🟣 Фиолетовый (index 2) -->
+    <style name="TimePickerThemePurple" parent="TimePickerBase">
+        <item name="android:colorAccent">#FF9B59B6</item>
+        <item name="android:colorPrimary">#FF9B59B6</item>
+        <item name="android:colorControlActivated">#FF9B59B6</item>
+    </style>
+
+    <!-- 🟢 Зелёный (index 3) -->
+    <style name="TimePickerThemeGreen" parent="TimePickerBase">
+        <item name="android:colorAccent">#FF2ECC71</item>
+        <item name="android:colorPrimary">#FF2ECC71</item>
+        <item name="android:colorControlActivated">#FF2ECC71</item>
+    </style>
+
+    <!-- Кнопки OK/Отмена в диалоге -->
+    <style name="TimePickerButton" parent="android:Widget.Material.Button.Borderless">
+        <item name="android:textColor">#FFE8927C</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Фон кнопки «+» — круг. Цвет белый; реальный акцентный применяется
+  через setColorFilter в PlannerWidget.kt (как было).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#FFFFFFFF" />
+</shape>

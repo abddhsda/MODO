@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Цвета виджета — синхронизированы с тёмной темой Flutter:
+    widget_background : scaffoldBackgroundColor ≈ #1A1A1A
+    widget_surface    : colorScheme.surface ≈ #242424
+    widget_text       : Colors.white
+    widget_subtext    : Colors.white.withOpacity(0.4) ≈ #66FFFFFF
+    widget_divider    : Colors.white.withOpacity(0.1) ≈ #1AFFFFFF
+-->
+<resources>
+    <color name="widget_background">#FF1A1A1A</color>
+    <color name="widget_surface">#FF242424</color>
+    <color name="widget_text">#FFFFFFFF</color>
+    <color name="widget_subtext">#66FFFFFF</color>
+    <color name="widget_divider">#1AFFFFFF</color>
+</resources>

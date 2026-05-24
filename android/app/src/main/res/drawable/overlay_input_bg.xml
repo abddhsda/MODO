@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Фон поля ввода и строки времени.
+  Чуть светлее фона карточки — поверхность второго уровня.
+  Радиус 14dp как у PlanCard в Flutter.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#FF262626" />
+    <corners android:radius="14dp" />
+</shape>
