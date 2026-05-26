@@ -11,6 +11,9 @@ import '../constants/colors.dart';
 import '../utils/ui_helpers.dart';
 import '../services/export_service.dart';
 import '../services/notifications.dart' as notif;
+import '../services/subscription_service.dart';
+import 'paywall_screen.dart';
+import '../widgets/subscription_badge.dart';
 import 'package:shared_preferences/shared_preferences.dart' show SharedPreferences;
 
 class SettingsScreen extends StatelessWidget {
@@ -59,18 +62,33 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 ...List.generate(AppColors.accents.length, (i) {
                   final isLast = i == AppColors.accents.length - 1;
+                  final locked = !SubscriptionService.instance.canUseAccentAt(i);
                   return _AccentRow(
                     color: AppColors.accents[i],
                     name: AppColors.accentNames[i],
                     isSelected: settings.accent == AppColors.accents[i],
                     isLastItem: isLast,
-                    onTap: () {
+                    isLocked: locked,
+                    onTap: () async {
+                      if (locked) {
+                        await PaywallScreen.show(context,
+                            reason: PaywallReason.accentLocked);
+                        return;
+                      }
                       hapticLight();
                       settings.setAccent(AppColors.accents[i]);
                     },
                   );
                 }),
 
+                const SizedBox(height: 32),
+
+                // ── Подписка ──────────────────────────────────────
+                _sectionLabel('Подписка', textColor),
+                const SizedBox(height: 12),
+                SubscriptionBadge(
+                  onUpgraded: () {},
+                ),
                 const SizedBox(height: 32),
 
                 // ── Premium ───────────────────────────────────
@@ -90,7 +108,14 @@ class SettingsScreen extends StatelessWidget {
                       label: 'Экспорт в TXT',
                       sublabel: 'Читаемый дневник',
                       textColor: textColor,
-                      onTap: () { hapticLight(); ExportService.exportTxt(context); },
+                      onTap: () async {
+                        hapticLight();
+                        if (!SubscriptionService.instance.canExport) {
+                          await PaywallScreen.show(context, reason: PaywallReason.exportBlocked);
+                          return;
+                        }
+                        ExportService.exportTxt(context);
+                      },
                     ),
                     Divider(height: 1, indent: 56, color: textColor.withValues(alpha: 0.1)),
                     _actionItem(
@@ -99,7 +124,14 @@ class SettingsScreen extends StatelessWidget {
                       label: 'Экспорт в CSV',
                       sublabel: 'Таблица для Excel / Sheets',
                       textColor: textColor,
-                      onTap: () { hapticLight(); ExportService.exportCsv(context); },
+                      onTap: () async {
+                        hapticLight();
+                        if (!SubscriptionService.instance.canExport) {
+                          await PaywallScreen.show(context, reason: PaywallReason.exportBlocked);
+                          return;
+                        }
+                        ExportService.exportCsv(context);
+                      },
                     ),
                     Divider(height: 1, indent: 56, color: textColor.withValues(alpha: 0.1)),
                     _actionItem(
@@ -108,7 +140,14 @@ class SettingsScreen extends StatelessWidget {
                       label: 'Резервная копия JSON',
                       sublabel: 'Полный бэкап всех данных',
                       textColor: textColor,
-                      onTap: () { hapticLight(); ExportService.exportJson(context); },
+                      onTap: () async {
+                        hapticLight();
+                        if (!SubscriptionService.instance.canExport) {
+                          await PaywallScreen.show(context, reason: PaywallReason.exportBlocked);
+                          return;
+                        }
+                        ExportService.exportJson(context);
+                      },
                     ),
                     Divider(height: 1, indent: 56, color: textColor.withValues(alpha: 0.1)),
                     _actionItem(
@@ -283,32 +322,38 @@ class _AccentRow extends StatelessWidget {
   final String name;
   final bool isSelected;
   final bool isLastItem;
+  final bool isLocked;
   final VoidCallback onTap;
   const _AccentRow({required this.color, required this.name,
-      required this.isSelected, required this.onTap, this.isLastItem = false});
+      required this.isSelected, required this.onTap,
+      this.isLastItem = false, this.isLocked = false});
 
   @override
   Widget build(BuildContext context) {
     final textColor = Theme.of(context).colorScheme.onSurface;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        margin: EdgeInsets.only(bottom: isLastItem ? 0 : 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected ? Border.all(color: color, width: 2) : null,
+      child: Opacity(
+        opacity: isLocked ? 0.45 : 1.0,
+        child: Container(
+          margin: EdgeInsets.only(bottom: isLastItem ? 0 : 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: isSelected ? Border.all(color: color, width: 2) : null,
+          ),
+          child: Row(children: [
+            Container(width: 24, height: 24,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+            const SizedBox(width: 16),
+            Text(name, style: TextStyle(fontSize: 16,
+                fontWeight: FontWeight.w600, color: textColor)),
+            const Spacer(),
+            if (isLocked) const Icon(Icons.lock_outline_rounded, size: 16, color: Colors.grey),
+            if (isSelected && !isLocked) Icon(Icons.check_circle, color: color),
+          ]),
         ),
-        child: Row(children: [
-          Container(width: 24, height: 24,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-          const SizedBox(width: 16),
-          Text(name, style: TextStyle(fontSize: 16,
-              fontWeight: FontWeight.w600, color: textColor)),
-          const Spacer(),
-          if (isSelected) Icon(Icons.check_circle, color: color),
-        ]),
       ),
     );
   }

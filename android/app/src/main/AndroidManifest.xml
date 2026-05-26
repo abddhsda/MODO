@@ -8,11 +8,19 @@
         android:minSdkVersion="24"
         android:targetSdkVersion="36" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- Биометрия -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
     <permission
         android:name="ru.modo.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -25,9 +33,16 @@
         android:extractNativeLibs="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Modo" >
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- ══ RuStore Pay SDK: ID приложения из консоли ══ -->
+        <!-- Найти: console.rustore.ru → Приложения → MODO → цифры в URL между apps/ и /versions -->
+        <meta-data
+            android:name="console_app_id_value"
+            android:value="@string/CONSOLE_APPLICATION_ID" />
 
         <!-- Основная Flutter activity -->
         <activity
@@ -40,11 +55,23 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- ══ RuStore Pay SDK: deeplink для возврата из банковского приложения ══ -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="@string/SDK_PAY_SCHEME" />
+            </intent-filter>
+
+            <meta-data
+                android:name="sdk_pay_scheme_value"
+                android:value="@string/SDK_PAY_SCHEME" />
+
         </activity>
 
         <!--
             AddPlanActivity — прозрачный оверлей для добавления плана прямо с виджета
-            Theme.Translucent.NoTitleBar чтобы фон был прозрачным
         -->
         <activity
             android:name="ru.modo.app.AddPlanActivity"

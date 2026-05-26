@@ -34,11 +34,15 @@
 // ════════════════════════════════════════════════════
 
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app.dart';
 import '../constants/colors.dart';
+import '../services/photo_service.dart';
+import '../services/subscription_service.dart';
+import '../screens/paywall_screen.dart';
 import '../utils/ui_helpers.dart';
 import 'section_block.dart';
 
@@ -46,29 +50,17 @@ import 'section_block.dart';
 // EntryCard
 // ─────────────────────────────────────────────────────
 class EntryCard extends StatefulWidget {
-  final List<String> answers;
-  final List<Map<String, String>> dailyQuestions;
-  final Map<String, dynamic> surveyPack;
   final bool isToday;
-  final String note;
   final Map<String, int>? ratings;
-  final Future<void> Function(String) onNoteSaved;
   final Future<void> Function(Map<String, int>) onRatingsSaved;
   final void Function(bool)? onSliderActiveChanged;
-  final VoidCallback? onOpenQuestions; // кнопка «перепройти вопросы»
 
   const EntryCard({
     super.key,
-    required this.answers,
-    required this.dailyQuestions,
-    required this.surveyPack,
     required this.isToday,
-    required this.note,
     this.ratings,
-    required this.onNoteSaved,
     required this.onRatingsSaved,
     this.onSliderActiveChanged,
-    this.onOpenQuestions,
   });
 
   @override
@@ -76,8 +68,6 @@ class EntryCard extends StatefulWidget {
 }
 
 class _EntryCardState extends State<EntryCard> {
-  late TextEditingController _noteController;
-
   // AFFORDANCE-FIX: drag handle icon always visible — one-time hint removed
   SharedPreferences? _prefs;
 
@@ -99,7 +89,6 @@ class _EntryCardState extends State<EntryCard> {
   @override
   void initState() {
     super.initState();
-    _noteController = TextEditingController(text: widget.note);
     _initRatings();
     SharedPreferences.getInstance().then((prefs) {
       _prefs = prefs;
@@ -169,15 +158,11 @@ class _EntryCardState extends State<EntryCard> {
   @override
   void didUpdateWidget(EntryCard old) {
     super.didUpdateWidget(old);
-    if (old.note != widget.note && _noteController.text != widget.note) {
-      _noteController.text = widget.note;
-    }
     if (old.ratings != widget.ratings) _initRatings();
   }
 
   @override
   void dispose() {
-    _noteController.dispose();
     _saveDebounce?.cancel();
     super.dispose();
   }
@@ -188,17 +173,6 @@ class _EntryCardState extends State<EntryCard> {
     final textColor  = isDark ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF1A1A1A);
     final labelColor = isDark ? Colors.white.withValues(alpha: 0.45) : Colors.grey.shade600;
     final accent     = AppSettings.of(context).accent;
-
-    final qCount        = widget.dailyQuestions.length;
-    final textAnswers   = widget.answers.length > qCount
-        ? widget.answers.sublist(0, qCount) : widget.answers;
-    final surveyAnswers = widget.answers.length > qCount
-        ? widget.answers.sublist(qCount) : <String>[];
-    final surveyQuestions =
-        List<String>.from(widget.surveyPack['questions'] as List);
-
-    final totalQ = qCount + surveyQuestions.length;
-    final filled = widget.answers.where((a) => a.isNotEmpty).length;
 
     return GestureDetector(
       // Тап вне активной строки — деактивация.
@@ -221,105 +195,7 @@ class _EntryCardState extends State<EntryCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
 
-                    // ── 1. Вопросы дня ──────────────────────────
-                    SectionBlock(
-                      emoji: '💬',
-                      title: 'Вопросы дня',
-                      labelColor: labelColor,
-                      initiallyExpanded: true,
-                      children: [
-                        ...List.generate(textAnswers.length, (i) {
-                          if (i >= widget.dailyQuestions.length ||
-                              textAnswers[i].isEmpty) return const SizedBox();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${widget.dailyQuestions[i]['emoji']} '
-                                  '${widget.dailyQuestions[i]['q']}',
-                                  style: TextStyle(fontSize: 12,
-                                      color: labelColor, height: 1.4),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(textAnswers[i],
-                                    style: TextStyle(fontSize: 15,
-                                        color: textColor, height: 1.5)),
-                              ],
-                            ),
-                          );
-                        }),
-
-                        // Кнопка «перепройти вопросы»
-                        if (widget.onOpenQuestions != null)
-                          GestureDetector(
-                            onTap: () {
-                              hapticMedium();
-                              widget.onOpenQuestions!();
-                            },
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10, horizontal: 14),
-                              decoration: BoxDecoration(
-                                color: accent.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: accent.withValues(alpha: 0.25), width: 1),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.refresh_rounded,
-                                      size: 16, color: accent),
-                                  const SizedBox(width: 8),
-                                  Text('Перепройти вопросы',
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: accent)),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // ── 2. Опрос дня ────────────────────────────
-                    if (surveyAnswers.isNotEmpty &&
-                        surveyAnswers.any((a) => a.isNotEmpty)) ...[
-                      SectionBlock(
-                        emoji: widget.surveyPack['emoji'] as String,
-                        title: widget.surveyPack['title'] as String,
-                        labelColor: labelColor,
-                        initiallyExpanded: true,
-                        children: List.generate(surveyAnswers.length, (i) {
-                          if (i >= surveyQuestions.length ||
-                              surveyAnswers[i].isEmpty) return const SizedBox();
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(surveyQuestions[i],
-                                    style: TextStyle(fontSize: 12,
-                                        color: labelColor, height: 1.4)),
-                                const SizedBox(height: 4),
-                                Text(surveyAnswers[i],
-                                    style: TextStyle(fontSize: 15,
-                                        color: textColor, height: 1.5)),
-                              ],
-                            ),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-
-                    // ── 3. Оценки дня ───────────────────────────
+                    // ── Оценки дня ──────────────────────────────
                     SectionBlock(
                       emoji: '📊',
                       title: 'Оценки дня',
@@ -345,39 +221,330 @@ class _EntryCardState extends State<EntryCard> {
                       ),
                     ),
 
-                    const SizedBox(height: 10),
 
-                    // ── 4. Заметки ──────────────────────────────
-                    SectionBlock(
-                      emoji: '✏️',
-                      title: 'Заметки по дню',
-                      labelColor: labelColor,
-                      initiallyExpanded: true,
-                      emptyHint: widget.note.isEmpty
-                          ? 'О чём ты думаешь прямо сейчас...'
-                          : (widget.note.length > 80
-                              ? '${widget.note.substring(0, 80)}...'
-                              : widget.note),
-                      children: [
-                        TextField(
-                          controller: _noteController,
-                          maxLines: null,
-                          autofocus: false,
-                          style: TextStyle(fontSize: 15,
-                              color: textColor, height: 1.5),
-                          decoration: InputDecoration(
-                            hintText: 'О чём ты думаешь прямо сейчас...',
-                            hintStyle: TextStyle(color: labelColor, fontSize: 14),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onChanged: widget.onNoteSaved,
-                        ),
-                      ],
-                    ),
                   ],
               ),
             ),
+      ),
+    );
+  }
+}
+
+
+// ─────────────────────────────────────────────────────
+// _PhotoSection — секция фотографий в EntryCard
+//
+// Free:  1 фото. Plus: до 5 фото.
+// Тап на фото — полноэкранный просмотр со свайпом.
+// Долгий тап — удаление с подтверждением.
+// Кнопка + открывает PhotoService.pick() шторку.
+// ─────────────────────────────────────────────────────
+class _PhotoSection extends StatelessWidget {
+  final List<String> photoPaths;
+  final String dateKey;
+  final Color accent;
+  final Color textColor;
+  final Color labelColor;
+  final void Function(List<String>) onChanged;
+
+  const _PhotoSection({
+    required this.photoPaths,
+    required this.dateKey,
+    required this.accent,
+    required this.textColor,
+    required this.labelColor,
+    required this.onChanged,
+  });
+
+  int get _maxPhotos => PhotoService.instance.maxPhotos;
+  bool get _canAdd   => photoPaths.length < _maxPhotos;
+
+  Future<void> _addPhoto(BuildContext ctx) async {
+    // Проверяем лимит
+    if (!_canAdd) {
+      if (SubscriptionService.instance.isFree) {
+        // Предлагаем Plus
+        final purchased = await PaywallScreen.show(
+          ctx, reason: PaywallReason.manual,
+        );
+        if (!purchased) return;
+      }
+      return;
+    }
+
+    final path = await PhotoService.instance.pick(
+      ctx,
+      dateKey: dateKey,
+      index:   photoPaths.length,
+    );
+    if (path == null) return;
+
+    final updated = <String>[...photoPaths, path];
+    onChanged(updated);
+  }
+
+  Future<void> _deletePhoto(BuildContext ctx, int index) async {
+    final confirmed = await showDialog<bool>(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20)),
+        title: Text('Удалить фото?',
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Theme.of(ctx).colorScheme.onSurface)),
+        content: Text('Это действие нельзя отменить.',
+            style: TextStyle(
+                color: Theme.of(ctx).colorScheme.onSurface
+                    .withValues(alpha: 0.6))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена',
+                style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    await PhotoService.instance.delete(photoPaths[index]);
+    final updated = [...photoPaths]..removeAt(index);
+    onChanged(updated);
+  }
+
+  void _viewPhoto(BuildContext ctx, int startIndex) {
+    Navigator.push(
+      ctx,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => _PhotoViewer(
+          paths:      photoPaths,
+          startIndex: startIndex,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext ctx) {
+    return SectionBlock(
+      emoji: '📷',
+      title: 'Фото',
+      labelColor: labelColor,
+      initiallyExpanded: photoPaths.isNotEmpty,
+      emptyHint: photoPaths.isEmpty ? 'Добавь фото к записи' : null,
+      children: [
+        if (photoPaths.isNotEmpty) ...[
+          SizedBox(
+            height: 110,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: photoPaths.length + (_canAdd ? 1 : 0),
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (ctx, i) {
+                // Кнопка добавления
+                if (i == photoPaths.length) {
+                  return _AddPhotoButton(
+                    accent: accent,
+                    onTap: () => _addPhoto(ctx),
+                  );
+                }
+                // Карточка фото
+                return _PhotoThumbnail(
+                  path:     photoPaths[i],
+                  onTap:    () => _viewPhoto(ctx, i),
+                  onDelete: () => _deletePhoto(ctx, i),
+                );
+              },
+            ),
+          ),
+          // Счётчик (только для free — намекает на лимит)
+          if (SubscriptionService.instance.isFree) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${photoPaths.length} / $_maxPhotos · больше фото в Плюсе',
+              style: TextStyle(fontSize: 12,
+                  color: textColor.withValues(alpha: 0.35)),
+            ),
+          ],
+        ] else ...[
+          // Пустое состояние — большая кнопка
+          GestureDetector(
+            onTap: () => _addPhoto(ctx),
+            child: Container(
+              width: double.infinity,
+              height: 70,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: accent.withValues(alpha: 0.2),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_photo_alternate_outlined,
+                      size: 22, color: accent.withValues(alpha: 0.7)),
+                  const SizedBox(width: 10),
+                  Text('Добавить фото',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: accent.withValues(alpha: 0.8))),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ─── Миниатюра фото ────────────────────────────────────
+class _PhotoThumbnail extends StatelessWidget {
+  final String path;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _PhotoThumbnail({
+    required this.path,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(path);
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: () {
+        HapticFeedback.mediumImpact();
+        onDelete();
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: 110, height: 110,
+          child: file.existsSync()
+              ? Image.file(file, fit: BoxFit.cover)
+              : Container(
+                  color: Colors.grey.shade800,
+                  child: const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white38,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Кнопка добавления ─────────────────────────────────
+class _AddPhotoButton extends StatelessWidget {
+  final Color accent;
+  final VoidCallback onTap;
+
+  const _AddPhotoButton({required this.accent, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 70, height: 110,
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: accent.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_rounded, color: accent, size: 26),
+            const SizedBox(height: 4),
+            Text('Фото',
+                style: TextStyle(
+                    fontSize: 11, color: accent.withValues(alpha: 0.7))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Полноэкранный просмотр ────────────────────────────
+class _PhotoViewer extends StatefulWidget {
+  final List<String> paths;
+  final int startIndex;
+
+  const _PhotoViewer({required this.paths, required this.startIndex});
+
+  @override
+  State<_PhotoViewer> createState() => _PhotoViewerState();
+}
+
+class _PhotoViewerState extends State<_PhotoViewer> {
+  late PageController _ctrl;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.startIndex;
+    _ctrl = PageController(initialPage: widget.startIndex);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: widget.paths.length > 1
+            ? Text('${_current + 1} / ${widget.paths.length}',
+                style: const TextStyle(color: Colors.white70, fontSize: 15))
+            : null,
+      ),
+      body: PageView.builder(
+        controller: _ctrl,
+        itemCount: widget.paths.length,
+        onPageChanged: (i) => setState(() => _current = i),
+        itemBuilder: (_, i) {
+          final file = File(widget.paths[i]);
+          return InteractiveViewer(
+            child: Center(
+              child: file.existsSync()
+                  ? Image.file(file, fit: BoxFit.contain)
+                  : const Icon(Icons.broken_image_outlined,
+                      color: Colors.white38, size: 64),
+            ),
+          );
+        },
       ),
     );
   }

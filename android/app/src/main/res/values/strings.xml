@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- android/app/src/main/res/values/strings.xml -->
+<resources>
+    <string name="app_name">Modo</string>
+
+    <!-- ══ RuStore Pay SDK ══════════════════════════════════════════ -->
+    <!-- CONSOLE_APPLICATION_ID: найди в консоли РуСтора:             -->
+    <!-- console.rustore.ru → Приложения → MODO                       -->
+    <!-- Цифры в URL между /apps/ и /versions — это твой ID           -->
+    <string name="CONSOLE_APPLICATION_ID">ВСТАВЬ_ЦИФРОВОЙ_ID</string>
+
+    <!-- SDK_PAY_SCHEME: любая уникальная строка в нижнем регистре    -->
+    <!-- Используется для возврата из банковского приложения           -->
+    <string name="SDK_PAY_SCHEME">modopayment</string>
+</resources>

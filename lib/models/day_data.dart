@@ -18,37 +18,60 @@ class DayData {
   final List<String> answers;
   final Map<String, int> ratings;
   final String note;
+  // Категория цели на момент записи дня.
+  // Сохраняется при каждом сохранении дня — вопросы при просмотре
+  // берутся из этой категории, а не из текущей настройки профиля.
+  // Пустая строка = категория неизвестна (старые записи) → fallback на текущую.
+  final String category;
+  final List<String> photoPaths;
+  // Rich text Delta JSON (flutter_quill). Пустая строка = нет форматирования.
+  final String noteJson;
 
   const DayData({
     this.answers = const [],
     this.ratings = const {},
     this.note    = '',
+    this.category = '',
+    this.photoPaths = const [],
+    this.noteJson   = '',
   });
 
   DayData copyWith({
     List<String>?    answers,
     Map<String, int>? ratings,
     String?           note,
+    String?           category,
+    List<String>?     photoPaths,
+    String?           noteJson,
   }) =>
       DayData(
-        answers: answers ?? this.answers,
-        ratings: ratings ?? this.ratings,
-        note:    note    ?? this.note,
+        answers:  answers  ?? this.answers,
+        ratings:  ratings  ?? this.ratings,
+        note:     note     ?? this.note,
+        category:   category   ?? this.category,
+        photoPaths: photoPaths ?? this.photoPaths,
+        noteJson:   noteJson   ?? this.noteJson,
       );
 
   // ── JSON ──────────────────────────────────────────
 
   Map<String, dynamic> toJson() => {
-    'answers': answers,
-    'ratings': ratings,
-    'note':    note,
+    'answers':  answers,
+    'ratings':  ratings,
+    'note':     note,
+    'category':   category,
+    'photoPaths': photoPaths,
+    'noteJson':   noteJson,
   };
 
   factory DayData.fromJson(Map<dynamic, dynamic> j) => DayData(
-    answers: List<String>.from(j['answers'] as List? ?? []),
-    ratings: Map<String, int>.from(
+    answers:  List<String>.from(j['answers'] as List? ?? []),
+    ratings:  Map<String, int>.from(
         (j['ratings'] as Map? ?? {}).map((k, v) => MapEntry(k as String, (v as num).toInt()))),
-    note: j['note'] as String? ?? '',
+    note:     j['note']     as String? ?? '',
+    category:   j['category']   as String? ?? '',
+    photoPaths: List<String>.from(j['photoPaths'] as List? ?? []),
+    noteJson:   j['noteJson']   as String? ?? '',
   );
 
   // ── Загрузка ──────────────────────────────────────

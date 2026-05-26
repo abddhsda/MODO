@@ -5,6 +5,7 @@
 //           DayCardArea, EmptyCard, FutureCard, StatCard
 // ════════════════════════════════════════════════════
 
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../app.dart';
 import '../models/day_data.dart';
@@ -13,6 +14,11 @@ import '../utils/ui_helpers.dart';
 import '../utils/date_labels.dart';
 import '../services/streak_freeze.dart';
 import '../widgets/entry_card.dart';
+import '../screens/diary_editor_screen.dart';
+import '../services/photo_service.dart';
+import '../services/photo_service.dart';
+import '../widgets/xp_progress_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ════════════════════════════════════════════════════
 // HomeTab — вкладка 0
@@ -34,6 +40,9 @@ class HomeTab extends StatelessWidget {
   final GlobalKey? headerKey;
   final GlobalKey? dateKey_;
   final GlobalKey? cardKey;
+  final List<String> photoPaths;
+  final String dateKey;
+  final Future<void> Function(List<String>) onPhotosSaved;
 
   const HomeTab({
     super.key,
@@ -53,6 +62,9 @@ class HomeTab extends StatelessWidget {
     this.headerKey,
     this.dateKey_,
     this.cardKey,
+    required this.photoPaths,
+    required this.dateKey,
+    required this.onPhotosSaved,
   });
 
   bool _isToday(DateTime d) {
@@ -87,10 +99,11 @@ class HomeTab extends StatelessWidget {
                 children: [
                   KeyedSubtree(
                     key: headerKey,
-                    child: HomeHeader(
-                      goal: goal,
-                      streak: streak,
+                    child: UserProfileCard(
                       userName: userName,
+                      goal: goal,
+                      goalCategory: goalCategory,
+                      streak: streak,
                       streakRecord: streakRecord,
                       totalDays: totalDays,
                       accent: accent,
@@ -98,7 +111,9 @@ class HomeTab extends StatelessWidget {
                       onEditGoal: onEditGoal,
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 8),
+                  const XPProgressBar(),
+                  const SizedBox(height: 16),
                   KeyedSubtree(
                     key: dateKey_,
                     child: DateNavigator(
@@ -136,11 +151,473 @@ class HomeTab extends StatelessWidget {
                   onDateChanged: onDateChanged,
                   onNoteSaved: onNoteSaved,
                   onRatingsSaved: onRatingsSaved,
+                  photoPaths: photoPaths,
+                  dateKey: dateKey,
+                  onPhotosSaved: onPhotosSaved,
                       ),
                     ),
                   ),
                 );
               },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+// ── Показать стрик-инфо ──────────────────────────────────────
+void _showStreakInfo(
+  BuildContext context, {
+  required int streak,
+  required int streakRecord,
+  required int totalDays,
+  required Color accent,
+  required Color textColor,
+}) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  final bg     = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+  final tc     = isDark ? Colors.white : const Color(0xFF1A1A1A);
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: bg,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (_) => Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(child: Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: tc.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(2)),
+          )),
+          const SizedBox(height: 20),
+          Text('🔥 Стрик', style: TextStyle(
+              fontSize: 22, fontWeight: FontWeight.w900, color: tc)),
+          const SizedBox(height: 20),
+          Row(children: [
+            StatCard(emoji: '🔥', label: 'Текущий', value: '$streak дн.',
+                color: accent, bg: accent.withValues(alpha: 0.1)),
+            const SizedBox(width: 12),
+            StatCard(emoji: '🏆', label: 'Рекорд', value: '$streakRecord дн.',
+                color: const Color(0xFFFFD700),
+                bg: const Color(0xFFFFD700).withValues(alpha: 0.1)),
+            const SizedBox(width: 12),
+            StatCard(emoji: '📅', label: 'Всего дней', value: '$totalDays дн.',
+                color: Colors.blueGrey,
+                bg: Colors.blueGrey.withValues(alpha: 0.1)),
+          ]),
+        ],
+      ),
+    ),
+  );
+}
+
+// ════════════════════════════════════════════════════
+// UserProfileCard — карточка профиля вместо приветствия
+// По нажатию открывает sheet редактирования имени и цели
+// ════════════════════════════════════════════════════
+class UserProfileCard extends StatelessWidget {
+  final String userName;
+  final String goal;
+  final String goalCategory;
+  final int streak;
+  final int streakRecord;
+  final int totalDays;
+  final Color accent;
+  final Color textColor;
+  final VoidCallback onEditGoal;
+
+  const UserProfileCard({
+    super.key,
+    required this.userName,
+    required this.goal,
+    required this.goalCategory,
+    required this.streak,
+    required this.streakRecord,
+    required this.totalDays,
+    required this.accent,
+    required this.textColor,
+    required this.onEditGoal,
+  });
+
+  static const _categories = [
+    {'emoji': '💰', 'title': 'Деньги и бизнес', 'key': 'money'},
+    {'emoji': '💪', 'title': 'Здоровье и спорт', 'key': 'health'},
+    {'emoji': '📚', 'title': 'Обучение и рост',  'key': 'learning'},
+    {'emoji': '❤️', 'title': 'Отношения',         'key': 'relations'},
+    {'emoji': '🎯', 'title': 'Карьера',           'key': 'career'},
+    {'emoji': '🧘', 'title': 'Mindset',           'key': 'mindset'},
+  ];
+
+  String get _categoryEmoji {
+    final cat = _categories.firstWhere(
+      (c) => c['key'] == goalCategory,
+      orElse: () => _categories[5],
+    );
+    return cat['emoji'] as String;
+  }
+
+  String get _categoryTitle {
+    final cat = _categories.firstWhere(
+      (c) => c['key'] == goalCategory,
+      orElse: () => _categories[5],
+    );
+    return cat['title'] as String;
+  }
+
+  void _showEditSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditProfileSheet(
+        userName: userName,
+        goal: goal,
+        goalCategory: goalCategory,
+        accent: accent,
+        onSave: (newName, newGoal, newCategory) async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('userName', newName);
+          await prefs.setString('goal', newGoal);
+          await prefs.setString('goalCategory', newCategory);
+          onEditGoal(); // триггерим rebuild в home_screen
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final name = userName.trim().isEmpty ? 'Привет' : userName.trim();
+
+    return GestureDetector(
+      onTap: () => _showEditSheet(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            // Аватар-инициал
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+                border: Border.all(color: accent.withValues(alpha: 0.35), width: 1.5),
+              ),
+              child: Center(
+                child: Text(
+                  name.isNotEmpty ? name[0].toUpperCase() : '?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            // Имя + цель
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Text(_categoryEmoji, style: const TextStyle(fontSize: 13)),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          goal.isNotEmpty ? goal : _categoryTitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: textColor.withValues(alpha: 0.45),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Стрик справа
+            GestureDetector(
+              onTap: () => _showStreakInfo(
+                context,
+                streak: streak,
+                streakRecord: streakRecord,
+                totalDays: totalDays,
+                accent: accent,
+                textColor: textColor,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: accent.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🔥', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$streak',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: accent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.edit_outlined, size: 16,
+                color: textColor.withValues(alpha: 0.25)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Нижний sheet редактирования профиля ──────────────────────
+class _EditProfileSheet extends StatefulWidget {
+  final String userName;
+  final String goal;
+  final String goalCategory;
+  final Color accent;
+  final Future<void> Function(String name, String goal, String category) onSave;
+
+  const _EditProfileSheet({
+    required this.userName,
+    required this.goal,
+    required this.goalCategory,
+    required this.accent,
+    required this.onSave,
+  });
+
+  @override
+  State<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends State<_EditProfileSheet> {
+  late TextEditingController _nameCtrl;
+  late TextEditingController _goalCtrl;
+  late String _selectedCategory;
+  bool _saving = false;
+
+  static const _categories = [
+    {'emoji': '💰', 'title': 'Деньги и бизнес', 'key': 'money'},
+    {'emoji': '💪', 'title': 'Здоровье и спорт', 'key': 'health'},
+    {'emoji': '📚', 'title': 'Обучение и рост',  'key': 'learning'},
+    {'emoji': '❤️', 'title': 'Отношения',         'key': 'relations'},
+    {'emoji': '🎯', 'title': 'Карьера',           'key': 'career'},
+    {'emoji': '🧘', 'title': 'Mindset',           'key': 'mindset'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.userName);
+    _goalCtrl = TextEditingController(text: widget.goal);
+    _selectedCategory = widget.goalCategory.isEmpty ? 'mindset' : widget.goalCategory;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _goalCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    await widget.onSave(
+      _nameCtrl.text.trim(),
+      _goalCtrl.text.trim(),
+      _selectedCategory,
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final bg        = isDark ? const Color(0xFF1C1C1E) : Colors.white;
+    final bottom    = MediaQuery.of(context).viewInsets.bottom;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Ручка
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: textColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text('Профиль',
+                style: TextStyle(fontSize: 22,
+                    fontWeight: FontWeight.w900, color: textColor)),
+            const SizedBox(height: 20),
+
+            // Имя
+            Text('Имя', style: TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textColor.withValues(alpha: 0.5))),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _nameCtrl,
+              style: TextStyle(fontSize: 16, color: textColor),
+              decoration: InputDecoration(
+                hintText: 'Как тебя зовут?',
+                hintStyle: TextStyle(color: textColor.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: textColor.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Цель
+            Text('Цель', style: TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textColor.withValues(alpha: 0.5))),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _goalCtrl,
+              style: TextStyle(fontSize: 16, color: textColor),
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: 'Например: пробежать 5 км без остановки',
+                hintStyle: TextStyle(color: textColor.withValues(alpha: 0.3)),
+                filled: true,
+                fillColor: textColor.withValues(alpha: 0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Категория
+            Text('Категория', style: TextStyle(fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: textColor.withValues(alpha: 0.5))),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _categories.map((cat) {
+                final key      = cat['key'] as String;
+                final selected = key == _selectedCategory;
+                return GestureDetector(
+                  onTap: () => setState(() => _selectedCategory = key),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? widget.accent.withValues(alpha: 0.15)
+                          : textColor.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: selected
+                            ? widget.accent.withValues(alpha: 0.5)
+                            : Colors.transparent,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(cat['emoji'] as String,
+                            style: const TextStyle(fontSize: 16)),
+                        const SizedBox(width: 6),
+                        Text(cat['title'] as String,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: selected ? widget.accent : textColor.withValues(alpha: 0.6),
+                            )),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 28),
+
+            // Кнопка сохранить
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: widget.accent,
+                  foregroundColor: Colors.black,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
+                ),
+                child: _saving
+                    ? const SizedBox(width: 22, height: 22,
+                        child: CircularProgressIndicator(
+                            color: Colors.black, strokeWidth: 2.5))
+                    : const Text('Сохранить',
+                        style: TextStyle(fontSize: 16,
+                            fontWeight: FontWeight.w700)),
+              ),
             ),
           ],
         ),
@@ -538,6 +1015,9 @@ class DayCardArea extends StatefulWidget {
   final ValueChanged<DateTime> onDateChanged;
   final Future<void> Function(String) onNoteSaved;
   final Future<void> Function(Map<String, int>) onRatingsSaved;
+  final List<String> photoPaths;
+  final String dateKey;
+  final Future<void> Function(List<String>) onPhotosSaved;
 
   const DayCardArea({
     super.key,
@@ -551,6 +1031,9 @@ class DayCardArea extends StatefulWidget {
     required this.onDateChanged,
     required this.onNoteSaved,
     required this.onRatingsSaved,
+    required this.photoPaths,
+    required this.dateKey,
+    required this.onPhotosSaved,
   });
 
   @override
@@ -615,26 +1098,262 @@ class _DayCardAreaState extends State<DayCardArea> {
         child: widget.isFuture
             ? const FutureCard()
             : hasEntry
-                ? EntryCard(
-                    onSliderActiveChanged: (active) {
-                      _metricEditActive = active;
-                      if (active) { _decided = true; _didSwipe = false; }
-                    },
-                    onOpenQuestions: widget.onOpenQuestions,
-                    answers: widget.selectedDay!.answers,
-                    dailyQuestions: getDailyQuestions(
-                        widget.selectedDate, category: widget.goalCategory),
-                    surveyPack: getDailySurveyPack(
-                        widget.selectedDate, category: widget.goalCategory),
-                    isToday: widget.isToday,
-                    note: widget.selectedDay!.note,
-                    ratings: widget.selectedDay!.ratings.isEmpty
-                        ? null
-                        : widget.selectedDay!.ratings,
-                    onNoteSaved: widget.onNoteSaved,
-                    onRatingsSaved: widget.onRatingsSaved,
+                ? Column(
+                    children: [
+                      // ── Верхняя сетка: фото + вопросы ──────────
+                      _DayPreviewGrid(
+                        selectedDay: widget.selectedDay!,
+                        selectedDate: widget.selectedDate,
+                        goalCategory: widget.goalCategory,
+                        photoPaths: widget.photoPaths,
+                        dateKey: widget.dateKey,
+                        accent: accent,
+                        isToday: widget.isToday,
+                        onOpenQuestions: widget.onOpenQuestions,
+                        onNoteSaved: widget.onNoteSaved,
+                        onPhotosSaved: widget.onPhotosSaved,
+                      ),
+                      const SizedBox(height: 10),
+                      // ── Детали: оценки + заметки ────────────────
+                      EntryCard(
+                        onSliderActiveChanged: (active) {
+                          _metricEditActive = active;
+                          if (active) { _decided = true; _didSwipe = false; }
+                        },
+                        ratings: widget.selectedDay!.ratings.isEmpty
+                            ? null
+                            : widget.selectedDay!.ratings,
+                        onRatingsSaved: widget.onRatingsSaved,
+                        isToday: widget.isToday,
+                      ),
+                    ],
                   )
                 : EmptyCard(isToday: widget.isToday, accent: accent, streak: widget.streak),
+      ),
+    );
+  }
+}
+
+
+// ════════════════════════════════════════════════════
+// _DayPreviewGrid — две плитки: Дневник + Вопросы
+// ════════════════════════════════════════════════════
+class _DayPreviewGrid extends StatelessWidget {
+  final DayData selectedDay;
+  final DateTime selectedDate;
+  final String goalCategory;
+  final List<String> photoPaths;
+  final String dateKey;
+  final Color accent;
+  final bool isToday;
+  final VoidCallback onOpenQuestions;
+  final Future<void> Function(String) onNoteSaved;
+  final Future<void> Function(List<String>) onPhotosSaved;
+
+  const _DayPreviewGrid({
+    required this.selectedDay,
+    required this.selectedDate,
+    required this.goalCategory,
+    required this.photoPaths,
+    required this.dateKey,
+    required this.accent,
+    required this.isToday,
+    required this.onOpenQuestions,
+    required this.onNoteSaved,
+    required this.onPhotosSaved,
+  });
+
+  String get _dateLabel {
+    const months = [
+      'января','февраля','марта','апреля','мая','июня',
+      'июля','августа','сентября','октября','ноября','декабря'
+    ];
+    return '${selectedDate.day} ${months[selectedDate.month - 1]} ${selectedDate.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark    = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
+    final surface   = Theme.of(context).colorScheme.surface;
+
+    final questions = getDailyQuestions(selectedDate, category: goalCategory);
+    final surveyPack = getDailySurveyPack(selectedDate, category: goalCategory);
+    final surveyQs = List<String>.from(surveyPack['questions'] as List? ?? []);
+    final totalQ    = questions.length + surveyQs.length;
+    final filled    = selectedDay.answers
+        .take(totalQ).where((a) => a.isNotEmpty).length;
+
+    final hasNote   = selectedDay.note.isNotEmpty;
+    final hasPhoto  = photoPaths.isNotEmpty;
+
+    return SizedBox(
+      height: 170,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+
+          // ── Левая плитка: ЗАПИСЬ ДНЯ ────────────────
+          Expanded(
+            child: GestureDetector(
+              onTap: () => DiaryEditorScreen.show(
+                context,
+                dateLabel: _dateLabel,
+                dateKey: dateKey,
+                initialNoteJson: selectedDay.noteJson.isNotEmpty
+                    ? selectedDay.noteJson
+                    : selectedDay.note,
+                initialPhotos: photoPaths,
+                onNoteSaved: onNoteSaved,
+                onPhotosSaved: onPhotosSaved,
+              ),
+              child: Container(
+                // Внешний контейнер — border + glow (не clip!)
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: isToday ? Border.all(
+                      color: const Color(0xFFFFD700), width: 2) : null,
+                  boxShadow: isToday ? [BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.35),
+                      blurRadius: 12, spreadRadius: 2)] : null,
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(isToday ? 18 : 20),
+                  child: Container(
+                    color: surface,
+                    child: Stack(fit: StackFit.expand, children: [
+                  // Фото фоном если есть
+                  if (hasPhoto)
+                    Image.file(File(photoPaths.first),
+                        fit: BoxFit.cover),
+                  // Затемнение поверх фото
+                  if (hasPhoto)
+                    Container(color: Colors.black.withValues(alpha: 0.35)),
+                  // Содержимое
+                  Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Icon(Icons.edit_note_rounded,
+                              size: 16,
+                              color: hasPhoto
+                                  ? Colors.white.withValues(alpha: 0.7)
+                                  : textColor.withValues(alpha: 0.5)),
+                          const SizedBox(width: 6),
+                          Text('Дневник',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: hasPhoto
+                                      ? Colors.white.withValues(alpha: 0.7)
+                                      : textColor.withValues(alpha: 0.5))),
+                          if (hasPhoto) ...[
+                            const Spacer(),
+                            Text('📷 ${photoPaths.length}',
+                                style: const TextStyle(
+                                    fontSize: 11, color: Colors.white70)),
+                          ],
+                        ]),
+                        const Spacer(),
+                        // Превью текста
+                        if (hasNote)
+                          Text(
+                            selectedDay.note.length > 80
+                                ? '${selectedDay.note.substring(0, 80)}...'
+                                : selectedDay.note,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: hasPhoto
+                                  ? Colors.white.withValues(alpha: 0.85)
+                                  : textColor.withValues(alpha: 0.6),
+                              height: 1.4,
+                            ),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                          )
+                        else
+                          Text('Нажми чтобы записать...',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: hasPhoto
+                                      ? Colors.white.withValues(alpha: 0.45)
+                                      : textColor.withValues(alpha: 0.2))),
+                      ],
+                    ),
+                  ),
+                ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 10),
+
+          // ── Правая плитка: ВОПРОСЫ ──────────────────
+          Expanded(
+            child: GestureDetector(
+              onTap: onOpenQuestions,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: surface,
+                  borderRadius: BorderRadius.circular(20),
+                  border: isToday ? Border.all(
+                      color: const Color(0xFFFFD700), width: 2) : null,
+                  boxShadow: isToday ? [BoxShadow(
+                      color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                      blurRadius: 10, spreadRadius: 1)] : null,
+                ),
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Icon(Icons.chat_bubble_outline_rounded,
+                          size: 16, color: accent),
+                      const SizedBox(width: 6),
+                      Text('Вопросы дня',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textColor.withValues(alpha: 0.5))),
+                    ]),
+                    const Spacer(),
+                    // Большой счётчик
+                    Text(
+                      '$filled/$totalQ',
+                      style: TextStyle(
+                        fontSize: 52,
+                        fontWeight: FontWeight.w900,
+                        color: filled == totalQ ? accent : textColor,
+                        height: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      filled == totalQ ? 'отвечено ✓' : 'ответов',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: textColor.withValues(alpha: 0.4)),
+                    ),
+                    const Spacer(),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: totalQ > 0 ? filled / totalQ : 0,
+                        minHeight: 4,
+                        backgroundColor: textColor.withValues(alpha: 0.08),
+                        valueColor: AlwaysStoppedAnimation<Color>(accent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

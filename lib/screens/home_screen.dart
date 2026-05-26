@@ -26,6 +26,8 @@ import 'day_complete_screen.dart';
 import '../services/notifications.dart' as notif;
 import '../services/analytics.dart';
 import '../services/streak_freeze.dart';
+import '../services/subscription_service.dart';
+import 'paywall_screen.dart';
 import 'weekly_review_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -372,8 +374,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       PageRouteBuilder<Map<String, dynamic>>(
         pageBuilder: (_, __, ___) => QuestionScreen(
           existing: _selectedDay?.answers,
-          questions: getDailyQuestions(_selectedDate, category: _goalCategory),
-          surveyPack: getDailySurveyPack(_selectedDate, category: _goalCategory),
+          questions: getDailyQuestions(_selectedDate,
+              // Для уже заполненных дней — используем категорию на момент записи
+              category: (_selectedDay?.category.isNotEmpty == true
+                  ? _selectedDay!.category : _goalCategory)),
+          surveyPack: getDailySurveyPack(_selectedDate,
+              category: (_selectedDay?.category.isNotEmpty == true
+                  ? _selectedDay!.category : _goalCategory)),
           // FIX БАГ-5: передаём выбранный день для корректного ключа черновика
           selectedDate: _selectedDate,
         ),
@@ -403,6 +410,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             'food':         r['food']         as int,
             'sleep':        r['sleep']        as int,
           },
+          // Сохраняем категорию на момент записи — при просмотре вопросы
+          // будут показаны из той же категории, даже если пользователь
+          // потом сменил категорию профиля
+          category: existing.category.isNotEmpty
+              ? existing.category  // редактирование — не меняем категорию
+              : _goalCategory,     // новая запись — берём текущую
         );
         _streak       = _calcStreak();
         _streakRecord = _calcStreakRecord();
@@ -535,48 +548,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  // Вызывается из UserProfileCard после сохранения профиля
   void _editGoal() {
-    hapticLight();
-    final controller = TextEditingController(text: _goal);
-    final accent = AppSettings.of(context).accent;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        title: Text('Изменить цель', style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: Theme.of(context).colorScheme.onSurface)),
-        content: TextField(
-          controller: controller, autofocus: true,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
-              color: Theme.of(context).colorScheme.onSurface),
-          decoration: const InputDecoration(
-              border: InputBorder.none,
-              hintText: 'Твоя цель...',
-              hintStyle: TextStyle(color: Colors.grey)),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена', style: TextStyle(color: Colors.grey))),
-          ElevatedButton(
-            onPressed: () {
-              final goal = controller.text.trim();
-              if (goal.isNotEmpty) {
-                hapticMedium();
-                _saveGoal(goal, _goalCategory, '', isEdit: true);
-                Navigator.pop(context);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: Colors.white,
-                elevation: 0),
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    ).whenComplete(controller.dispose);
+    // Оставляем как no-op — реальное сохранение идёт через onSave в _EditProfileSheet
+    // который напрямую пишет в SharedPreferences и вызывает _reloadProfile()
+    _reloadProfile();
+  }
+
+  Future<void> _reloadProfile() async {
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    setState(() {
+      _goal         = prefs.getString('goal')         ?? _goal;
+      _goalCategory = prefs.getString('goalCategory') ?? _goalCategory;
+      _userName     = prefs.getString('userName')     ?? _userName;
+    });
   }
 
   Future<void> _reload() async {
@@ -648,23 +633,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             totalDays: _diary.length,
             selectedDate: _selectedDate,
             selectedDay: _selectedDay,
-            goalCategory: _goalCategory,
+            // При просмотре заполненного дня — используем категорию из записи
+            goalCategory: (_diary[dateKey(_selectedDate)]?.category.isNotEmpty == true
+                ? _diary[dateKey(_selectedDate)]!.category
+                : _goalCategory),
             onEditGoal: _editGoal,
             onDateChanged: (d) => setState(() => _selectedDate = d),
             onOpenQuestions: _goToQuestions,
             headerKey: _headerKey,
             dateKey_: _dateKey,
             cardKey: _cardKey,
-            onNoteSaved: (text) async {
+            onNoteSaved: (json) async {
               final k = dateKey(_selectedDate);
               setState(() => _diary[k] =
-                  (_diary[k] ?? const DayData()).copyWith(note: text));
+                  (_diary[k] ?? const DayData()).copyWith(noteJson: json));
               await _save();
             },
             onRatingsSaved: (r) async {
               final k = dateKey(_selectedDate);
               setState(() => _diary[k] =
                   (_diary[k] ?? const DayData()).copyWith(ratings: r));
+              await _save();
+            },
+            photoPaths: _diary[dateKey(_selectedDate)]?.photoPaths ?? const [],
+            dateKey: dateKey(_selectedDate),
+            onPhotosSaved: (paths) async {
+              final k = dateKey(_selectedDate);
+              setState(() => _diary[k] =
+                  (_diary[k] ?? const DayData()).copyWith(photoPaths: paths));
               await _save();
             },
           ),
